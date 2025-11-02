@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CT Real Estate Explorer</title>
+  <link rel="stylesheet" href="./src/styles.css" />
+</head>
+<body>
+  <header>
+    <h1>How have residential property values and buying patterns
+        changed in Connecticut — and what
+        does that reveal about shifting demand and affordability?</h1>
+    <p id="status">Loading…</p>
+  </header>
+
+  <main>
+    <!-- Existing sanity check -->
+    <section class="card">
+      <h2>CT Residential Real Estate Sales by Year</h2>
+      <svg id="chart-sanity" width="960" height="420" role="img" aria-label="Total sales count per year"></svg>
+    </section>
+
+    <!-- Static #1 -->
+    <section class="card">
+      <h2>Median Sale Price by Residential Property Type (2006–2024)</h2>
+      <p class="sub">Static multi-series lines (median by year within each property type).</p>
+      <svg id="chart-type-price" width="960" height="420" role="img" aria-label="Median sale price by property type"></svg>
+    </section>
+
+    <!-- Static #2 -->
+    <section class="card">
+      <div class="flex between">
+        <h2>Top 10 Towns by Median Sale Price in CT  (Most Recent Year)</h2>
+        <!-- if you want to change the default year later, do it in main.js -->
+      </div>
+      <svg id="chart-top-towns" width="960" height="480" role="img" aria-label="Top towns by median sale price"></svg>
+    </section>
+
+    <!-- Dynamic #3 -->
+    <section class="card">
+      <div class="flex between">
+        <h2>Sales Volume by Residential Property Type Over Time</h2>
+        <div class="controls">
+          <label><input type="radio" name="stackMode" value="absolute" checked> Absolute</label>
+          <label><input type="radio" name="stackMode" value="percent"> % Share</label>
+        </div>
+      </div>
+      <svg id="chart-stack" width="960" height="420" role="img" aria-label="Stacked area of sales volume"></svg>
+      <div id="legend-stack" class="legend"></div>
+      <div id="tooltip-stack" class="tooltip" hidden></div>
+    </section>
+
+    <!-- Dynamic #4 -->
+    <section class="card">
+    <div class="flex between">
+        <h2>Median Sale Price Over Time (Filtered by Town and Residential Type)</h2>
+        <div class="controls">
+        <label>Town:
+            <select id="trend-town"></select>
+        </label>
+        <label>Residential Type:
+            <select id="trend-type"></select>
+        </label>
+        </div>
+    </div>
+    <svg id="chart-trend" width="960" height="420" role="img" aria-label="Median sale price over time by filters"></svg>
+    <div id="tooltip-trend" class="tooltip" hidden></div>
+    </section>
+
+  </main>
+
+  <!-- D3 (ESM) and our code -->
+  <script type="module">
+    import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
+    import "./src/main.js";
+    window.d3 = d3; // optional for console debugging
+  </script>
+</body>
+</html>
