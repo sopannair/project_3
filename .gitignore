@@ -1,0 +1,3 @@
+data/raw/*.csv
+.venv/
+__pycache__/
