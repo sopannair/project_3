@@ -380,3 +380,302 @@ const mostRecentYear = d3.max(years);
 
   update(); // initial render
 })();
+
+// =====================================================
+// Interactive Explorer (Map + Linked Trend + Type Mix)
+// =====================================================
+(async function explorer() {
+  // ---- CONFIG / ELEMENTS ----
+  const GEO_PATH = "./data/geo/ct_towns.geojson";
+  const mapSvg   = d3.select("#map");
+  const trendSvg = d3.select("#trend");
+  const mixSvg   = d3.select("#mix");
+  const legendEl = d3.select("#map-legend");
+  const insightEl= d3.select("#insight");
+  const slider   = document.getElementById("year-slider");
+  const yearLbl  = document.getElementById("year-label");
+  const metricSel= document.getElementById("map-metric");
+
+  // Respect your earlier filter (>=2006, no "nan") if not already applied
+  const clean = data.filter(d => d.Year >= 2006 && d.ResidentialType.toLowerCase() !== "nan");
+
+  const YEARS = Array.from(new Set(clean.map(d => d.Year))).sort(d3.ascending);
+  slider.min = YEARS[0]; slider.max = YEARS.at(-1); slider.value = YEARS.at(-1);
+  yearLbl.textContent = slider.value;
+
+  // Normalize town label like your Python script (title-case common)
+  function normTown(s) { return (s ?? "").trim().replace(/\s+/g," ").replace(/\b\w/g, c => c.toUpperCase()); }
+
+  // -------------- Aggregations --------------
+  // Weighted median approximation per town-year (weighted avg of medians by NumSales)
+  const townYear = d3.rollups(
+    clean,
+    v => {
+      const total = d3.sum(v, d => d.NumSales);
+      const median = d3.sum(v, d => d.MedianSale * d.NumSales) / (total || 1);
+      return { median, volume: total };
+    },
+    d => normTown(d.Town),
+    d => d.Year
+  ); // Map<Town, Map<Year, {median, volume}>>
+
+  const townSeries = new Map(
+    Array.from(townYear, ([town, m]) => [
+      town,
+      Array.from(m, ([Year, o]) => ({ Year:+Year, Median:o.median, Volume:o.volume }))
+            .sort((a,b)=>d3.ascending(a.Year,b.Year))
+    ])
+  );
+
+  // Statewide series (for trend comparison)
+  const stateSeries = Array.from(
+    d3.rollup(
+      clean,
+      v => {
+        const total = d3.sum(v, d => d.NumSales);
+        return d3.sum(v, d => d.MedianSale * d.NumSales) / (total || 1);
+      },
+      d => d.Year
+    ),
+    ([Year, Median]) => ({ Year:+Year, Median })
+  ).sort((a,b)=>d3.ascending(a.Year,b.Year));
+
+  // Residential type mix per (town*, year)
+  function typeMix(rows) {
+    const map = d3.rollup(rows, v => d3.sum(v, d => d.NumSales), d => d.ResidentialType);
+    return Array.from(map, ([k, v]) => ({ type:k, value:v }));
+  }
+  function typeMixByTownYear(town, year) {
+    const rows = clean.filter(d => (town ? normTown(d.Town)===town : true) && d.Year===year);
+    return typeMix(rows);
+  }
+
+  // YoY growth per town-year (using townSeries)
+  const yoyByTownYear = new Map();
+  for (const [town, arr] of townSeries) {
+    const map = new Map();
+    for (let i=1; i<arr.length; i++) {
+      const prev = arr[i-1], cur = arr[i];
+      if (prev && prev.Median && cur && cur.Median) {
+        map.set(cur.Year, (cur.Median - prev.Median) / prev.Median);
+      }
+    }
+    yoyByTownYear.set(town, map);
+  }
+
+  // -------------- MAP: draw --------------
+  const geo = await d3.json(GEO_PATH);
+  const width = +mapSvg.attr("width"), height = +mapSvg.attr("height");
+  const proj = d3.geoMercator().fitSize([width, height], geo);
+  const path = d3.geoPath(proj);
+
+  // Derive Town Names from geoJson
+  function getTownName(f) {
+    const p = f.properties || {};
+    return normTown(p.name);
+  }
+
+  // Color scales (recomputed on update)
+  const fmtMoney = d3.format("$,");
+  const fmtPct = d3.format(".0%");
+
+  let selected = new Set(); // clicked towns
+
+  function mapColorScale(year, metric) {
+    // Build vector of values across towns for chosen metric
+    const values = geo.features.map(f => {
+      const town = getTownName(f);
+      const ser  = townSeries.get(town);
+      if (!ser) return NaN;
+      const row = ser.find(d => d.Year === +year);
+      if (!row) return NaN;
+      if (metric === "median") return row.Median;
+      if (metric === "volume") return row.Volume;
+      if (metric === "yoy") {
+        const map = yoyByTownYear.get(town);
+        return map ? map.get(+year) : NaN;
+      }
+    }).filter(v => !isNaN(v));
+
+    const min = d3.min(values), max = d3.max(values);
+    if (metric === "yoy") {
+      const lim = d3.max([Math.abs(min || 0), Math.abs(max || 0)]) || 0.01;
+      return d3.scaleDiverging([-lim, 0, +lim], d3.interpolateRdYlGn);
+    }
+    // sequential for median and volume
+    return d3.scaleSequential([min || 0, max || 1], metric === "median" ? d3.interpolateBlues : d3.interpolatePuRd);
+  }
+
+  function renderMap(year = +slider.value, metric = metricSel.value) {
+    yearLbl.textContent = year;
+
+    const color = mapColorScale(year, metric);
+
+    const towns = mapSvg.selectAll(".town")
+      .data(geo.features, d => getTownName(d));
+
+    towns.join("path")
+      .attr("class", d => "town" + (selected.has(getTownName(d)) ? " selected" : ""))
+      .attr("d", path)
+      .attr("fill", d => {
+        const name = getTownName(d);
+        const ser  = townSeries.get(name);
+        if (!ser) return "#eee";
+        const row  = ser.find(r => r.Year === +year);
+        if (!row) return "#eee";
+        const val = (metric==="median") ? row.Median
+                  : (metric==="volume") ? row.Volume
+                  : (yoyByTownYear.get(name)?.get(+year));
+        return (val==null || isNaN(val)) ? "#eee" : color(val);
+      })
+      .on("click", (event, d) => {
+        const name = getTownName(d);
+        if (event.metaKey || event.ctrlKey) {
+          if (selected.has(name)) selected.delete(name); else selected.add(name);
+        } else {
+          // single-select
+          selected = new Set(selected.has(name) && selected.size===1 ? [] : [name]);
+        }
+        renderMap(year, metric);
+        renderTrend();
+        renderMix();
+        renderInsight();
+      });
+
+    // simple legend
+    legendEl.html("");
+    const legend = legendEl.append("div");
+    if (metric === "yoy") {
+      legend.text("YoY % change (diverging)");
+    } else {
+      legend.text(metric === "median" ? "Median price" : "Sales volume");
+    }
+  }
+
+  // -------------- TREND: selected vs statewide --------------
+  function renderTrend() {
+    const W = +trendSvg.attr("width"), H = +trendSvg.attr("height");
+    trendSvg.selectAll("*").remove();
+    const M = {top:10,right:10,bottom:30,left:56};
+    const innerW = W - M.left - M.right, innerH = H - M.top - M.bottom;
+    const g = trendSvg.append("g").attr("transform",`translate(${M.left},${M.top})`);
+
+    const xs = d3.scaleLinear().domain(d3.extent(YEARS)).range([0,innerW]).nice();
+    const series = [];
+    // selected towns (limit 5 for clarity)
+    const selTowns = Array.from(selected).slice(0,5);
+    for (const t of selTowns) {
+      const s = (townSeries.get(t) || []).map(d => ({Year:d.Year, Value:d.Median}));
+      if (s.length) series.push({key:t, values:s});
+    }
+    // statewide
+    series.push({key:"Statewide", values: stateSeries.map(d => ({Year:d.Year, Value:d.Median}))});
+
+    const ymax = d3.max(series, s => d3.max(s.values, v => v.Value)) || 1;
+    const ys = d3.scaleLinear().domain([0, ymax]).range([innerH,0]).nice();
+    const color = d3.scaleOrdinal().domain(series.map(s=>s.key)).range(d3.schemeTableau10);
+
+    g.append("g").attr("transform",`translate(0,${innerH})`).attr("class","axis")
+      .call(d3.axisBottom(xs).tickFormat(d3.format("d")));
+    g.append("g").attr("class","axis")
+      .call(d3.axisLeft(ys).tickFormat(d => d3.format("$,")(d)));
+
+    const line = d3.line().x(d => xs(d.Year)).y(d => ys(d.Value));
+
+    g.selectAll(".trend").data(series).join("path")
+      .attr("class","trend").attr("fill","none").attr("stroke-width",2)
+      .attr("stroke", d => d.key==="Statewide" ? "#111" : color(d.key))
+      .attr("opacity", d => d.key==="Statewide" ? 0.9 : 0.85)
+      .attr("d", d => line(d.values));
+
+    // legend (inline)
+    const legend = g.append("g").attr("transform",`translate(${innerW-120},6)`);
+    series.forEach((s,i)=>{
+      legend.append("rect").attr("x",0).attr("y",i*16-9).attr("width",12).attr("height",12)
+        .attr("fill", s.key==="Statewide" ? "#111" : color(s.key));
+      legend.append("text").attr("x",16).attr("y",i*16).attr("dominant-baseline","central").text(s.key);
+    });
+  }
+
+  // -------------- MIX: stacked area of residential types --------------
+  function renderMix() {
+    const W = +mixSvg.attr("width"), H = +mixSvg.attr("height");
+    mixSvg.selectAll("*").remove();
+    const M = {top:10,right:10,bottom:30,left:56};
+    const innerW = W - M.left - M.right, innerH = H - M.top - M.bottom;
+    const g = mixSvg.append("g").attr("transform",`translate(${M.left},${M.top})`);
+
+    // focus rows: selected towns (or statewide if none)
+    const rows = selected.size
+      ? clean.filter(d => selected.has(normTown(d.Town)))
+      : clean;
+
+    const years = Array.from(new Set(rows.map(d => d.Year))).sort(d3.ascending);
+    const types = Array.from(new Set(rows.map(d => d.ResidentialType))).sort();
+
+    const matrix = years.map(Y => {
+      const row = {Year:Y};
+      for (const t of types) {
+        row[t] = d3.sum(rows.filter(d => d.Year===Y && d.ResidentialType===t), d => d.NumSales) || 0;
+      }
+      return row;
+    });
+
+    const xs = d3.scaleLinear().domain(d3.extent(years)).range([0,innerW]).nice();
+    const ys = d3.scaleLinear().range([innerH,0]).domain([0, d3.max(matrix, r => d3.sum(types, t => r[t]))]).nice();
+    const color = d3.scaleOrdinal().domain(types).range(d3.schemeTableau10);
+    const stack = d3.stack().keys(types);
+    const area = d3.area().x(d => xs(d.data.Year)).y0(d => ys(d[0])).y1(d => ys(d[1]));
+
+    g.append("g").attr("transform",`translate(0,${innerH})`).attr("class","axis")
+      .call(d3.axisBottom(xs).tickFormat(d3.format("d")));
+    g.append("g").attr("class","axis").call(d3.axisLeft(ys));
+
+    g.selectAll(".layer").data(stack(matrix)).join("path")
+      .attr("class","layer").attr("fill", d => color(d.key)).attr("d", area);
+  }
+
+  // -------------- INSIGHT PANEL --------------
+  function renderInsight() {
+    const year = +slider.value;
+    const towns = Array.from(selected);
+    if (!towns.length) {
+      // statewide
+      const stRow = stateSeries.find(d => d.Year === year);
+      const vol = d3.sum(clean.filter(d => d.Year===year), d => d.NumSales);
+      insightEl.html(`Statewide • ${year} — Median ${fmtMoney(stRow?.Median||0)} · ${fmtInt(vol)} sales`);
+      return;
+    }
+    // first selected town summary (if multiple, show first; still reflected in charts)
+    const t = towns[0];
+    const s = townSeries.get(t) || [];
+    const row = s.find(d => d.Year===year);
+    const vol = row?.Volume || 0;
+    // rank by median among towns with data
+    const medians = Array.from(townSeries.values()).map(arr => (arr.find(r => r.Year===year)?.Median)).filter(v => v>0);
+    const rank = 1 + medians.filter(v => v > (row?.Median||0)).length;
+    const pct = (1 - rank/medians.length);
+    insightEl.html(`${t} • ${year} — Median ${fmtMoney(row?.Median||0)} · ${fmtInt(vol)} sales · ${d3.format(".0%")(pct)} percentile`);
+  }
+
+  // -------------- Wire controls --------------
+  function updateAll() {
+    renderMap(+slider.value, metricSel.value);
+    renderTrend();
+    renderMix();
+    renderInsight();
+  }
+  slider.addEventListener("input", () => { yearLbl.textContent = slider.value; updateAll(); });
+  metricSel.addEventListener("change", updateAll);
+
+  // clicking background clears selection
+  mapSvg.on("click", (e) => {
+    if (e.target === mapSvg.node()) {
+      selected.clear();
+      updateAll();
+    }
+  });
+
+  // initial draw
+  updateAll();
+})();

@@ -15,3 +15,11 @@ main { display: grid; gap: 24px; }
 .legend .item { display: inline-flex; align-items: center; gap: 6px; font-size: 0.9rem; color: var(--muted); }
 .legend .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.2); }
 .tooltip { position: absolute; background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 8px 10px; font-size: 0.9rem; pointer-events: none; box-shadow: 0 4px 12px rgba(0,0,0,.08); }
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.panel { background: #fafafa; border: 1px solid #eee; border-radius: 10px; padding: 10px; }
+h3.tight { margin: 8px 0; }
+.insight { margin-top: 8px; color: var(--muted); font-size: 0.95rem; }
+#map { cursor: pointer; }
+#map .town { stroke: #fff; stroke-width: 0.6; }
+#map .town.selected { outline: 2px solid #111; stroke: #111; stroke-width: 1; }

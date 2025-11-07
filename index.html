@@ -68,6 +68,43 @@
     <div id="tooltip-trend" class="tooltip" hidden></div>
     </section>
 
+    <!-- === Interactive Explorer (beta) === -->
+<section class="card" id="explorer">
+  <div class="flex between">
+    <h2>Connecticut Residential Market Explorer (2006–Present)</h2>
+    <div class="controls">
+      <label>Map metric:
+        <select id="map-metric">
+          <option value="median">Median Price</option>
+          <option value="yoy">YoY % Change</option>
+          <option value="volume"># Sales</option>
+        </select>
+      </label>
+      <label>Year:
+        <input id="year-slider" type="range" min="2006" max="2024" value="2024" step="1">
+        <span id="year-label">2024</span>
+      </label>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="panel">
+      <svg id="map" width="640" height="560" role="img" aria-label="CT towns choropleth"></svg>
+      <div id="map-legend" class="legend"></div>
+      <p class="sub">Tip: click a town to select; ⌘/Ctrl-click to multi-select. Click empty space to clear.</p>
+    </div>
+
+    <div class="panel">
+      <h3 class="tight">Price Trend (Selected vs Statewide)</h3>
+      <svg id="trend" width="640" height="260"></svg>
+      <h3 class="tight">Buying Pattern: Residential Type Mix</h3>
+      <svg id="mix" width="640" height="260"></svg>
+      <div id="insight" class="insight"></div>
+    </div>
+  </div>
+</section>
+
+
   </main>
 
   <!-- D3 (ESM) and our code -->
