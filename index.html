@@ -71,7 +71,8 @@
     <!-- === Interactive Explorer (beta) === -->
 <section class="card" id="explorer">
   <div class="flex between">
-    <h2>Connecticut Residential Market Explorer (2006–Present)</h2>
+    <h2>Connecticut Residential Market Explorer <span id="explorer-year-range">(2006–Present)</span></h2>
+
     <div class="controls">
       <label>Map metric:
         <select id="map-metric">
@@ -91,14 +92,23 @@
     <div class="panel">
       <svg id="map" width="640" height="560" role="img" aria-label="CT towns choropleth"></svg>
       <div id="map-legend" class="legend"></div>
+      <div id="tooltip-map" class="tooltip" hidden></div>
       <p class="sub">Tip: click a town to select; ⌘/Ctrl-click to multi-select. Click empty space to clear.</p>
     </div>
 
     <div class="panel">
       <h3 class="tight">Price Trend (Selected vs Statewide)</h3>
       <svg id="trend" width="640" height="260"></svg>
-      <h3 class="tight">Buying Pattern: Residential Type Mix</h3>
-      <svg id="mix" width="640" height="260"></svg>
+
+    <h3 class="tight">Buying Pattern: Residential Type Mix</h3>
+    <div class="controls small" id="mix-controls">
+    <label><input type="radio" name="mixMode" value="absolute" checked> Absolute</label>
+    <label><input type="radio" name="mixMode" value="percent"> % Share</label>
+    </div>
+    <svg id="mix" width="640" height="260"></svg>
+    <div id="mix-legend" class="legend row"></div>
+    <div id="tooltip-mix" class="tooltip" hidden></div>
+
       <div id="insight" class="insight"></div>
     </div>
   </div>

@@ -23,3 +23,9 @@ h3.tight { margin: 8px 0; }
 #map { cursor: pointer; }
 #map .town { stroke: #fff; stroke-width: 0.6; }
 #map .town.selected { outline: 2px solid #111; stroke: #111; stroke-width: 1; }
+
+.controls.small label { margin-right: 12px; font-size: 0.95rem; }
+.legend.row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.legend .item { display: inline-flex; align-items: center; gap: 6px; font-size: 0.9rem; }
+.legend .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.tooltip { position: absolute; pointer-events: none; background: #fff; border: 1px solid #ddd; padding: 8px 10px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }

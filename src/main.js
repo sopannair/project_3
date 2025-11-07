@@ -395,13 +395,30 @@ const mostRecentYear = d3.max(years);
   const slider   = document.getElementById("year-slider");
   const yearLbl  = document.getElementById("year-label");
   const metricSel= document.getElementById("map-metric");
+  const mixControls = document.getElementById("mix-controls");
+    const mixLegend   = d3.select("#mix-legend");
+    const mixTooltip  = d3.select("#tooltip-mix");
+    let mixMode = "absolute"; // or "percent"
+    const mapTooltip = d3.select("#tooltip-map");
+
+
+
+  const yearRangeEl = document.getElementById("explorer-year-range");
+function updateYearHeading() {
+  yearRangeEl.textContent = `(${YEARS[0]}–${slider.value})`;
+}
+
 
   // Respect your earlier filter (>=2006, no "nan") if not already applied
   const clean = data.filter(d => d.Year >= 2006 && d.ResidentialType.toLowerCase() !== "nan");
 
   const YEARS = Array.from(new Set(clean.map(d => d.Year))).sort(d3.ascending);
-  slider.min = YEARS[0]; slider.max = YEARS.at(-1); slider.value = YEARS.at(-1);
-  yearLbl.textContent = slider.value;
+slider.min = YEARS[0]; slider.max = YEARS.at(-1); slider.value = YEARS.at(-1);
+yearLbl.textContent = slider.value;
+updateYearHeading();
+
+
+
 
   // Normalize town label like your Python script (title-case common)
   function normTown(s) { return (s ?? "").trim().replace(/\s+/g," ").replace(/\b\w/g, c => c.toUpperCase()); }
@@ -506,51 +523,88 @@ const mostRecentYear = d3.max(years);
     return d3.scaleSequential([min || 0, max || 1], metric === "median" ? d3.interpolateBlues : d3.interpolatePuRd);
   }
 
-  function renderMap(year = +slider.value, metric = metricSel.value) {
-    yearLbl.textContent = year;
+function renderMap(year = +slider.value, metric = metricSel.value) {
+  yearLbl.textContent = year;
 
-    const color = mapColorScale(year, metric);
+  const color = mapColorScale(year, metric);
 
-    const towns = mapSvg.selectAll(".town")
-      .data(geo.features, d => getTownName(d));
+  const towns = mapSvg.selectAll(".town")
+    .data(geo.features, d => getTownName(d));
 
-    towns.join("path")
-      .attr("class", d => "town" + (selected.has(getTownName(d)) ? " selected" : ""))
-      .attr("d", path)
-      .attr("fill", d => {
-        const name = getTownName(d);
-        const ser  = townSeries.get(name);
-        if (!ser) return "#eee";
-        const row  = ser.find(r => r.Year === +year);
-        if (!row) return "#eee";
-        const val = (metric==="median") ? row.Median
-                  : (metric==="volume") ? row.Volume
-                  : (yoyByTownYear.get(name)?.get(+year));
-        return (val==null || isNaN(val)) ? "#eee" : color(val);
-      })
-      .on("click", (event, d) => {
-        const name = getTownName(d);
-        if (event.metaKey || event.ctrlKey) {
-          if (selected.has(name)) selected.delete(name); else selected.add(name);
-        } else {
-          // single-select
-          selected = new Set(selected.has(name) && selected.size===1 ? [] : [name]);
-        }
-        renderMap(year, metric);
-        renderTrend();
-        renderMix();
-        renderInsight();
-      });
+  towns.join("path")
+    .attr("class", d => "town" + (selected.has(getTownName(d)) ? " selected" : ""))
+    .attr("d", path)
+    .attr("fill", d => {
+      const name = getTownName(d);
+      const ser  = townSeries.get(name);
+      if (!ser) return "#eee";
+      const row  = ser.find(r => r.Year === +year);
+      if (!row) return "#eee";
+      const val = (metric==="median") ? row.Median
+                : (metric==="volume") ? row.Volume
+                : (yoyByTownYear.get(name)?.get(+year));
+      return (val==null || isNaN(val)) ? "#eee" : color(val);
+    })
+    .on("mousemove", (event, d) => {
+      const name = getTownName(d);
+      const ser  = townSeries.get(name);
+      const row  = ser?.find(r => r.Year === +year);
+      let valText = "";
+      if (metric === "median") {
+        valText = row?.Median ? d3.format("$,")(row.Median) : "No data";
+      } else if (metric === "volume") {
+        valText = row?.Volume ? d3.format(",")(row.Volume) + " sales" : "No data";
+      } else {
+        const v = yoyByTownYear.get(name)?.get(+year);
+        valText = (v!=null && !isNaN(v)) ? d3.format(".1%")(v) : "No data";
+      }
 
-    // simple legend
-    legendEl.html("");
-    const legend = legendEl.append("div");
-    if (metric === "yoy") {
-      legend.text("YoY % change (diverging)");
-    } else {
-      legend.text(metric === "median" ? "Median price" : "Sales volume");
-    }
+      mapTooltip
+        .attr("hidden", null)
+        .style("left", (event.pageX + 12) + "px")
+        .style("top",  (event.pageY + 12) + "px")
+        .html(`<b>${name}</b><br>${metric === "median" ? "Median price" :
+               metric === "volume" ? "# Sales" : "YoY change"}: ${valText}`);
+    })
+    .on("mouseleave", () => mapTooltip.attr("hidden", true))
+    .on("click", (event, d) => {
+      const name = getTownName(d);
+      if (event.metaKey || event.ctrlKey) {
+        if (selected.has(name)) selected.delete(name); else selected.add(name);
+      } else {
+        selected = new Set(selected.has(name) && selected.size===1 ? [] : [name]);
+      }
+      renderMap(year, metric);
+      renderTrend();
+      renderMix();
+      renderInsight();
+    });
+
+  // --- Simple, descriptive legend text with min/max
+  const values = geo.features.map(f => {
+    const t = getTownName(f);
+    const r = townSeries.get(t)?.find(x => x.Year === +year);
+    if (!r) return NaN;
+    if (metric === "median") return r.Median;
+    if (metric === "volume") return r.Volume;
+    return yoyByTownYear.get(t)?.get(+year);
+  }).filter(v => !isNaN(v));
+
+  const min = d3.min(values), max = d3.max(values);
+
+  let legendText = "";
+  if (metric === "median") {
+    legendText = `Median price · darker blue = higher price (range ${d3.format("$,")(min || 0)} – ${d3.format("$,")(max || 0)})`;
+  } else if (metric === "volume") {
+    legendText = `# Sales · darker purple = higher sales (range ${d3.format(",")(min || 0)} – ${d3.format(",")(max || 0)})`;
+  } else {
+    // diverging scale description
+    const lim = d3.max([Math.abs(min || 0), Math.abs(max || 0)]) || 0;
+    legendText = `YoY change · red = decline, green = growth (≈ −${d3.format(".0%")(lim)} to +${d3.format(".0%")(lim)})`;
   }
+  legendEl.text(legendText);
+}
+
 
   // -------------- TREND: selected vs statewide --------------
   function renderTrend() {
@@ -598,7 +652,7 @@ const mostRecentYear = d3.max(years);
   }
 
   // -------------- MIX: stacked area of residential types --------------
-  function renderMix() {
+    function renderMix() {
     const W = +mixSvg.attr("width"), H = +mixSvg.attr("height");
     mixSvg.selectAll("*").remove();
     const M = {top:10,right:10,bottom:30,left:56};
@@ -607,33 +661,75 @@ const mostRecentYear = d3.max(years);
 
     // focus rows: selected towns (or statewide if none)
     const rows = selected.size
-      ? clean.filter(d => selected.has(normTown(d.Town)))
-      : clean;
+        ? clean.filter(d => selected.has(normTown(d.Town)))
+        : clean;
 
     const years = Array.from(new Set(rows.map(d => d.Year))).sort(d3.ascending);
     const types = Array.from(new Set(rows.map(d => d.ResidentialType))).sort();
 
+    // Year × Type -> NumSales matrix
     const matrix = years.map(Y => {
-      const row = {Year:Y};
-      for (const t of types) {
+        const row = {Year:Y};
+        for (const t of types) {
         row[t] = d3.sum(rows.filter(d => d.Year===Y && d.ResidentialType===t), d => d.NumSales) || 0;
-      }
-      return row;
+        }
+        return row;
     });
 
     const xs = d3.scaleLinear().domain(d3.extent(years)).range([0,innerW]).nice();
-    const ys = d3.scaleLinear().range([innerH,0]).domain([0, d3.max(matrix, r => d3.sum(types, t => r[t]))]).nice();
+    const ys = d3.scaleLinear().range([innerH,0]);
     const color = d3.scaleOrdinal().domain(types).range(d3.schemeTableau10);
-    const stack = d3.stack().keys(types);
+
+    const stackAbs = d3.stack().keys(types);
+    const stackPct = d3.stack().keys(types).offset(d3.stackOffsetExpand);
     const area = d3.area().x(d => xs(d.data.Year)).y0(d => ys(d[0])).y1(d => ys(d[1]));
 
-    g.append("g").attr("transform",`translate(0,${innerH})`).attr("class","axis")
-      .call(d3.axisBottom(xs).tickFormat(d3.format("d")));
-    g.append("g").attr("class","axis").call(d3.axisLeft(ys));
+    // choose mode
+    const series = (mixMode === "percent" ? stackPct : stackAbs)(matrix);
+    const ymax = mixMode === "percent" ? 1 : d3.max(series, s => d3.max(s, d => d[1]));
+    ys.domain([0, ymax]).nice();
 
-    g.selectAll(".layer").data(stack(matrix)).join("path")
-      .attr("class","layer").attr("fill", d => color(d.key)).attr("d", area);
-  }
+    // axes
+    g.append("g").attr("transform",`translate(0,${innerH})`).attr("class","axis")
+        .call(d3.axisBottom(xs).tickFormat(d3.format("d")));
+    g.append("g").attr("class","axis")
+        .call(mixMode==="percent" ? d3.axisLeft(ys).tickFormat(d3.format(".0%"))
+                                : d3.axisLeft(ys));
+
+    // layers + tooltip
+    g.selectAll(".layer").data(series, d => d.key).join("path")
+        .attr("class","layer")
+        .attr("fill", d => color(d.key))
+        .attr("d", area)
+        .on("mousemove", (event, d) => {
+        const [mx] = d3.pointer(event, g.node());
+        const year = Math.round(xs.invert(mx));
+        const row = matrix.find(r => r.Year === year);
+        if (!row) return;
+
+        const total = d3.sum(types, t => row[t] || 0);
+        const val = row[d.key] || 0;
+
+        mixTooltip
+            .attr("hidden", null)
+            .style("left", (event.pageX + 12) + "px")
+            .style("top",  (event.pageY + 12) + "px")
+            .html(
+            `<b>${d.key}</b><br/>Year: ${year}<br/>` +
+            (mixMode === "percent"
+                ? `Share: ${d3.format(".1%")(val / (total || 1))}`
+                : `Sales: ${d3.format(",")(val)}`
+            )
+            );
+        })
+        .on("mouseleave", () => mixTooltip.attr("hidden", true));
+
+    // legend
+    mixLegend.html("");
+    const items = mixLegend.selectAll(".item").data(types).join("div").attr("class","item");
+    items.append("span").attr("class","swatch").style("background", d => color(d));
+    items.append("span").text(d => d);
+    }
 
   // -------------- INSIGHT PANEL --------------
   function renderInsight() {
@@ -665,8 +761,21 @@ const mostRecentYear = d3.max(years);
     renderMix();
     renderInsight();
   }
-  slider.addEventListener("input", () => { yearLbl.textContent = slider.value; updateAll(); });
+
+  slider.addEventListener("input", () => {
+  yearLbl.textContent = slider.value;
+  updateYearHeading();   // <-- update "(2006–YYYY)" in the title
+  updateAll();
+});
+
   metricSel.addEventListener("change", updateAll);
+  Array.from(mixControls.querySelectorAll('input[name="mixMode"]')).forEach(r => {
+  r.addEventListener("change", (e) => {
+    mixMode = e.target.value;   // "absolute" or "percent"
+    renderMix();
+  });
+});
+
 
   // clicking background clears selection
   mapSvg.on("click", (e) => {
