@@ -3,117 +3,120 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>CT Real Estate Explorer</title>
+  <title>CT Residential Market Explorer</title>
   <link rel="stylesheet" href="./src/styles.css" />
 </head>
 <body>
   <header>
     <h1>How have residential property values and buying patterns
-        changed in Connecticut — and what
-        does that reveal about shifting demand and affordability?</h1>
+      changed in Connecticut — and what does that reveal about shifting demand and affordability?</h1>
     <p id="status">Loading…</p>
   </header>
 
   <main>
-    <!-- Existing sanity check -->
-    <section class="card">
-      <h2>CT Residential Real Estate Sales by Year</h2>
-      <svg id="chart-sanity" width="960" height="420" role="img" aria-label="Total sales count per year"></svg>
-    </section>
-
-    <!-- Static #1 -->
-    <section class="card">
-      <h2>Median Sale Price by Residential Property Type (2006–2024)</h2>
-      <p class="sub">Static multi-series lines (median by year within each property type).</p>
-      <svg id="chart-type-price" width="960" height="420" role="img" aria-label="Median sale price by property type"></svg>
-    </section>
-
-    <!-- Static #2 -->
-    <section class="card">
+    <!-- === Connecticut Residential Market Explorer === -->
+    <section class="card" id="explorer">
       <div class="flex between">
-        <h2>Top 10 Towns by Median Sale Price in CT  (Most Recent Year)</h2>
-        <!-- if you want to change the default year later, do it in main.js -->
-      </div>
-      <svg id="chart-top-towns" width="960" height="480" role="img" aria-label="Top towns by median sale price"></svg>
-    </section>
-
-    <!-- Dynamic #3 -->
-    <section class="card">
-      <div class="flex between">
-        <h2>Sales Volume by Residential Property Type Over Time</h2>
+        <h2>Connecticut Housing Market Explorer <span id="explorer-year-range">(2006–Present)</span></h2>
         <div class="controls">
-          <label><input type="radio" name="stackMode" value="absolute" checked> Absolute</label>
-          <label><input type="radio" name="stackMode" value="percent"> % Share</label>
+          <label>Map metric:
+            <select id="map-metric">
+              <option value="median">Median Price</option>
+              <option value="yoy">YoY % Change</option>
+              <option value="volume"># Sales</option>
+            </select>
+          </label>
+          <label>Year:
+            <input id="year-slider" type="range" min="2006" max="2024" value="2024" step="1">
+            <span id="year-label">2024</span>
+          </label>
         </div>
       </div>
-      <svg id="chart-stack" width="960" height="420" role="img" aria-label="Stacked area of sales volume"></svg>
-      <div id="legend-stack" class="legend"></div>
-      <div id="tooltip-stack" class="tooltip" hidden></div>
-    </section>
 
-    <!-- Dynamic #4 -->
-    <section class="card">
-    <div class="flex between">
-        <h2>Median Sale Price Over Time (Filtered by Town and Residential Type)</h2>
-        <div class="controls">
-        <label>Town:
-            <select id="trend-town"></select>
-        </label>
-        <label>Residential Type:
-            <select id="trend-type"></select>
-        </label>
+      <div class="grid-2">
+        <div class="panel">
+          <svg id="map" width="640" height="560" role="img" aria-label="CT towns choropleth"></svg>
+          <div id="map-legend" class="legend"></div>
+          <div id="tooltip-map" class="tooltip" hidden></div>
+          <p class="sub">Tip: click a town to select; ⌘/Ctrl-click to multi-select. Click empty space to clear.</p>
         </div>
-    </div>
-    <svg id="chart-trend" width="960" height="420" role="img" aria-label="Median sale price over time by filters"></svg>
-    <div id="tooltip-trend" class="tooltip" hidden></div>
+
+        <div class="panel">
+          <h3 class="tight">Price Trend (Selected vs Statewide)</h3>
+          <svg id="trend" width="640" height="260"></svg>
+
+          <h3 class="tight">Buying Pattern: Residential Type Mix</h3>
+          <div class="controls small" id="mix-controls">
+            <label><input type="radio" name="mixMode" value="absolute" checked> Absolute</label>
+            <label><input type="radio" name="mixMode" value="percent"> % Share</label>
+          </div>
+          <svg id="mix" width="640" height="260"></svg>
+          <div id="mix-legend" class="legend row"></div>
+          <div id="tooltip-mix" class="tooltip" hidden></div>
+
+          <div id="insight" class="insight"></div>
+        </div>
+      </div>
     </section>
+<section id="writeup">
+  <h1>Project Write-Up</h1>
 
-    <!-- === Interactive Explorer (beta) === -->
-<section class="card" id="explorer">
-  <div class="flex between">
-    <h2>Connecticut Residential Market Explorer <span id="explorer-year-range">(2006–Present)</span></h2>
+  <h2>Design Decisions</h2>
+  <ol>
+    <li>
+      <strong>Dataset and Topic:</strong>
+      <p>
+        I explored free public datasets on 
+        <a href="http://data.gov" target="_blank" rel="noopener noreferrer">data.gov</a>
+        and discovered a comprehensive real estate transaction dataset for the State of Connecticut.
+        Each record contained detailed fields such as town, sale date, property type, and sale amount—
+        allowing for deep exploration and filtering.
+        I selected this dataset because it offered the opportunity to build an informative and interactive tool
+        for homebuyers, investors, and policymakers seeking insights into Connecticut’s residential market trends.
+      </p>
+    </li>
 
-    <div class="controls">
-      <label>Map metric:
-        <select id="map-metric">
-          <option value="median">Median Price</option>
-          <option value="yoy">YoY % Change</option>
-          <option value="volume"># Sales</option>
-        </select>
-      </label>
-      <label>Year:
-        <input id="year-slider" type="range" min="2006" max="2024" value="2024" step="1">
-        <span id="year-label">2024</span>
-      </label>
-    </div>
-  </div>
+    <li>
+      <strong>Design Process:</strong>
+      <p>
+        I initially experimented with various chart types—including line graphs, bar charts, and stacked area charts—
+        before concluding that an interactive map should serve as the foundation of the visualization.
+        The map allows users to intuitively explore differences between towns while viewing corresponding
+        pricing and sales trends.
+        I was inspired by interactive election-day precinct maps, where color gradients communicate complex patterns
+        in a compact and engaging way.
+        To complement the map, I integrated a dynamic line chart to show historical price trends and a stacked area chart
+        to visualize property type composition over time.
+      </p>
+    </li>
 
-  <div class="grid-2">
-    <div class="panel">
-      <svg id="map" width="640" height="560" role="img" aria-label="CT towns choropleth"></svg>
-      <div id="map-legend" class="legend"></div>
-      <div id="tooltip-map" class="tooltip" hidden></div>
-      <p class="sub">Tip: click a town to select; ⌘/Ctrl-click to multi-select. Click empty space to clear.</p>
-    </div>
+    <li>
+      <strong>Interactive Elements:</strong>
+      <p>
+        My goal was to include meaningful interactivity without overwhelming the user.
+        The choropleth map uses color gradients to represent median property values, total sales volume,
+        and year-over-year change. Hovering over a town reveals a tooltip displaying its name and metric value,
+        while clicking selects one or more towns for comparison.
+        The accompanying line chart dynamically queries the selected towns’ price trajectories
+        alongside the statewide trend.
+        Finally, the stacked area chart depicts the mix of residential property types over time,
+        featuring hover tooltips, an <em>Absolute vs. % Share</em> toggle, and dynamically updated
+        statewide metrics for context.
+      </p>
+    </li>
+  </ol>
+  <h2>Development Process</h2>
+  <p>I completed Project 3 on my own without the help of team-members. 
+    While I am a strong proponent of collaboration, my full-time job means that my schedule can be challenging to work around. 
+    Coordinating work sessions and delegating the workload with a full team would have been difficult.
+    I instead took this opportunity to exercise my independent creative thinking abilities.
+    While the project took a considerable amount of time (around 12 people-hours spread across 2 weeks), I am confident that the final product was worth the effort.
+    The aspects that took the most time were creating the functions to render the charts and pull the relevent data from the dataset. 
+    I found many helpful resources online to implement the map visual and learned how to use "geoJSON" files for this purpose. 
 
-    <div class="panel">
-      <h3 class="tight">Price Trend (Selected vs Statewide)</h3>
-      <svg id="trend" width="640" height="260"></svg>
+</p>
 
-    <h3 class="tight">Buying Pattern: Residential Type Mix</h3>
-    <div class="controls small" id="mix-controls">
-    <label><input type="radio" name="mixMode" value="absolute" checked> Absolute</label>
-    <label><input type="radio" name="mixMode" value="percent"> % Share</label>
-    </div>
-    <svg id="mix" width="640" height="260"></svg>
-    <div id="mix-legend" class="legend row"></div>
-    <div id="tooltip-mix" class="tooltip" hidden></div>
-
-      <div id="insight" class="insight"></div>
-    </div>
-  </div>
 </section>
-
 
   </main>
 
